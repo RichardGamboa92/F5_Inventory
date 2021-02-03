@@ -1,0 +1,70 @@
+import paramiko
+import csv
+
+F5011_ssh_addr = "10.1.1.15"
+port = 22
+username = "root"
+password = "richyG1992"
+command_vs = 'tmsh list ltm virtual one-line'
+
+F5011_ssh = paramiko.SSHClient()
+F5011_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+F5011_ssh.connect(F5011_ssh_addr, port, username, password)
+stdin, stdout_vs, stderr = F5011_ssh.exec_command(command_vs)
+out = stdout_vs.readlines()  # out is a list, each position has each virtual server config
+VS_Total = []
+for s1_out in out:  # For each position in list out
+    Final = []
+    temp1 = str(s1_out)
+    temp1_list = temp1.split()
+    # print(temp1_list)
+    a = temp1_list.index('virtual')
+    b = temp1_list.index('destination')
+    Final = [temp1_list[a + 1], temp1_list[b + 1]]
+    for j in range(0, len(temp1_list)):
+        if temp1_list[j] == r'pool':
+            c = temp1_list.index('pool')
+            Final.append(temp1_list[c + 1])
+            command_to_pool_members = r'tmsh list ltm pool ' + temp1_list[c + 1] + r' one-line'
+            # print(command_to_pool_members)
+            F5011_ssh.connect(F5011_ssh_addr, port, username, password)
+            stdin, stdout_pool, stderr = F5011_ssh.exec_command(str(command_to_pool_members))
+            stdout_pool = stdout_pool.readlines()
+            stdout_pool_str = str(stdout_pool[0])
+            temp2_list = stdout_pool_str.split()
+            for i in range(0, len(temp2_list) - 1):
+                if temp2_list[i] == r'address':
+                    Final.append(temp2_list[i - 2])
+                    Final.append(temp2_list[i + 1])
+        elif temp1_list[j] == r'rules':
+            d = temp1_list.index('rules')
+            Final.append(temp1_list[d + 2])
+            command_to_irule = r'tmsh list ltm rule ' + temp1_list[d + 2] + ' | sed \'{:q;N;s/\\n//g;t q}\''
+            print('Print command_to_irule: ')
+            print(command_to_irule)
+            F5011_ssh.connect(F5011_ssh_addr, port, username, password)
+            stdin, stdout_irule, stderr = F5011_ssh.exec_command(str(command_to_irule))
+            stdout_irule = stdout_irule.readlines()
+            strIrule = str(stdout_irule[0])
+            strIruletolist = strIrule.split()
+            for i in range(0, len(strIruletolist) - 1):
+                if strIruletolist[i] == r'pool':
+                    Final.append(strIruletolist[i + 1])
+                    command_to_pool_members_from_irule = r'tmsh list ltm pool ' + strIruletolist[i + 1] + r' one-line'
+                    F5011_ssh.connect(F5011_ssh_addr, port, username, password)
+                    stdin, stdout_pool_from_irule, stderr = F5011_ssh.exec_command(
+                        str(command_to_pool_members_from_irule))
+                    stdout_pool_from_irule = stdout_pool_from_irule.readlines()
+                    stdout_pool_str = str(stdout_pool_from_irule[0])
+                    temp3_list = stdout_pool_str.split()
+                    for i in range(0, len(temp3_list) - 1):
+                        if temp3_list[i] == r'address':
+                            Final.append(temp3_list[i - 2])
+                            Final.append(temp3_list[i + 1])
+    VS_Total.append(Final)  # This is for append the list created of the VS that was iterated ON the FINAL VS_TOTAL
+print('VS_Total es:')
+print(VS_Total)
+
+with open('Inventario.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerows(VS_Total)
